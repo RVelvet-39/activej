@@ -10,7 +10,6 @@ import io.activej.promise.SettablePromise;
 import io.activej.test.rules.ByteBufRule;
 import io.activej.test.rules.EventloopRule;
 import org.junit.ClassRule;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -22,7 +21,6 @@ import java.util.LinkedHashSet;
 import java.util.Random;
 
 import static io.activej.bytebuf.ByteBufStrings.*;
-import static io.activej.eventloop.error.FatalErrorHandlers.rethrowOnAnyError;
 import static io.activej.http.TestUtils.readFully;
 import static io.activej.http.TestUtils.toByteArray;
 import static io.activej.promise.TestUtils.await;
@@ -249,8 +247,8 @@ public final class AsyncHttpServerTest {
 	public void testPipelining() throws Exception {
 		Eventloop eventloop = Eventloop.getCurrentEventloop();
 		int port = getFreePort();
-//		doTestPipelining(eventloop, blockingHttpServer(eventloop));
-//		doTestPipelining(eventloop, asyncHttpServer(eventloop));
+		doTestPipelining(eventloop, blockingHttpServer(eventloop, port), port);
+		doTestPipelining(eventloop, asyncHttpServer(eventloop, port), port);
 		doTestPipelining(eventloop, delayedHttpServer(eventloop, port), port);
 	}
 
@@ -264,64 +262,22 @@ public final class AsyncHttpServerTest {
 		socket.connect(new InetSocketAddress("localhost", port));
 
 		for (int i = 0; i < 100; i++) {
-			writeByRandomParts(socket, "GET /abc HTTP/1.1\r\nConnection: Keep-Alive\r\nHost: localhost\r\n\r\n"
-					+ "GET /123456 HTTP/1.1\r\nHost: localhost\r\n\r\n" +
+			writeByRandomParts(socket, "" +
+					"GET /abc HTTP/1.1\r\nConnection: Keep-Alive\r\nHost: localhost\r\n\r\n" +
+					"GET /123456 HTTP/1.1\r\nHost: localhost\r\n\r\n" +
+
 					"POST /post1 HTTP/1.1\r\n" +
 					"Host: localhost\r\n" +
 					"Content-Length: 8\r\n" +
 					"Content-Type: application/json\r\n\r\n" +
 					"{\"at\":2}" +
+
 					"POST /post2 HTTP/1.1\r\n" +
 					"Host: localhost\r\n" +
 					"Content-Length: 8\r\n" +
 					"Content-Type: application/json\r\n\r\n" +
 					"{\"at\":2}" +
-					"");
-		}
 
-		for (int i = 0; i < 100; i++) {
-			readAndAssert(socket.getInputStream(), "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nContent-Length: 4\r\n\r\n/abc");
-			readAndAssert(socket.getInputStream(), "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nContent-Length: 7\r\n\r\n/123456");
-			readAndAssert(socket.getInputStream(), "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nContent-Length: 6\r\n\r\n/post1");
-			readAndAssert(socket.getInputStream(), "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nContent-Length: 6\r\n\r\n/post2");
-		}
-
-		server.closeFuture().get();
-		thread.join();
-	}
-
-	@Test
-	@Ignore("does not work")
-	public void testPipelining2() throws Exception {
-		Eventloop eventloop = Eventloop.getCurrentEventloop();
-		int port = getFreePort();
-//		doTestPipelining(eventloop, blockingHttpServer(eventloop));
-//		doTestPipelining(eventloop, asyncHttpServer(eventloop));
-		doTestPipelining2(eventloop, delayedHttpServer(eventloop, port), port);
-	}
-
-	private void doTestPipelining2(Eventloop eventloop, AsyncHttpServer server, int port) throws Exception {
-		server.withListenPort(port);
-		server.listen();
-		Thread thread = new Thread(eventloop);
-		thread.start();
-
-		Socket socket = new Socket();
-		socket.connect(new InetSocketAddress("localhost", port));
-
-		for (int i = 0; i < 100; i++) {
-			writeByRandomParts(socket, "GET /abc HTTP/1.0\r\nHost: localhost\r\n\r\n"
-					+ "GET /123456 HTTP/1.1\r\nHost: localhost\r\n\r\n" +
-					"POST /post1 HTTP/1.1\r\n" +
-					"Host: localhost\r\n" +
-					"Content-Length: 8\r\n" +
-					"Content-Type: application/json\r\n\r\n" +
-					"{\"at\":2}" +
-					"POST /post2 HTTP/1.1\r\n" +
-					"Host: localhost\r\n" +
-					"Content-Length: 8\r\n" +
-					"Content-Type: application/json\r\n\r\n" +
-					"{\"at\":2}" +
 					"");
 		}
 
@@ -441,12 +397,5 @@ public final class AsyncHttpServerTest {
 		} catch (IOException e) {
 			throw new RuntimeException(e);
 		}
-	}
-
-	public static void main(String[] args) throws Exception {
-		Eventloop eventloop = Eventloop.create().withFatalErrorHandler(rethrowOnAnyError()).withCurrentThread();
-		AsyncHttpServer server = blockingHttpServer(eventloop, 8888);
-		server.listen();
-		eventloop.run();
 	}
 }
