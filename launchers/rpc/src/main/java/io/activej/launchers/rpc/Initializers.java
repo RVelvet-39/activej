@@ -18,6 +18,9 @@ package io.activej.launchers.rpc;
 
 import io.activej.common.api.Initializer;
 import io.activej.config.Config;
+import io.activej.inject.Key;
+import io.activej.jmx.JmxModule;
+import io.activej.rpc.client.RpcClient;
 import io.activej.rpc.server.RpcServer;
 
 import java.time.Duration;
@@ -29,6 +32,8 @@ import static io.activej.launchers.initializers.Initializers.ofAbstractServer;
 import static io.activej.rpc.server.RpcServer.DEFAULT_INITIAL_BUFFER_SIZE;
 
 public final class Initializers {
+	public static final String GLOBAL_RPC_CLIENT_NAME = "GlobalRpcClientStats";
+	public static final Key<RpcClient> GLOBAL_RPC_CLIENT_KEY = Key.ofName(RpcClient.class, GLOBAL_RPC_CLIENT_NAME);
 
 	public static Initializer<RpcServer> ofRpcServer(Config config) {
 		return server -> server
@@ -37,5 +42,10 @@ public final class Initializers {
 						config.get(ofMemSize(), "rpc.streamProtocol.defaultPacketSize", DEFAULT_INITIAL_BUFFER_SIZE),
 						config.get(ofFrameFormat(), "rpc.streamProtocol.frameFormat", null))
 				.withAutoFlushInterval(config.get(ofDuration(), "rpc.flushDelay", Duration.ZERO));
+	}
+
+	public static Initializer<JmxModule> ofGlobalRpcClientStats() {
+		return jmxModule -> jmxModule
+				.withGlobalMBean(RpcClient.class, GLOBAL_RPC_CLIENT_KEY);
 	}
 }
