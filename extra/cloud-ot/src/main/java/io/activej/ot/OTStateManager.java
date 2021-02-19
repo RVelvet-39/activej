@@ -127,7 +127,13 @@ public final class OTStateManager<K, D> implements EventloopService {
 
 	@NotNull
 	public Promise<Void> checkout() {
-		checkState(commitId == null);
+		checkState(!isPolling && !isSyncing, "Cannot check out while syncing or polling");
+		checkState(state != null, "Cannot check out when state has been invalidated");
+
+		commitId = null;
+		pendingProtoCommit = null;
+		pendingProtoCommitDiffs = null;
+
 		return uplink.checkout()
 				.whenResult(checkoutData -> {
 					state.init();
@@ -325,7 +331,7 @@ public final class OTStateManager<K, D> implements EventloopService {
 	}
 
 	public boolean isValid() {
-		return commitId != null;
+		return commitId != null && state != null;
 	}
 
 	public boolean hasWorkingDiffs() {
