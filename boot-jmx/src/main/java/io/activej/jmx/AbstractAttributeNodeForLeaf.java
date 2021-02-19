@@ -94,7 +94,7 @@ abstract class AbstractAttributeNodeForLeaf implements AttributeNode {
 	}
 
 	@Override
-	public final void setVisible(@NotNull String attrName) {
+	public void setVisible(@NotNull String attrName) {
 		checkArgument(name.equals(attrName));
 		this.visible = true;
 	}

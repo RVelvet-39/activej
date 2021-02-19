@@ -25,6 +25,8 @@ import java.util.*;
 
 import static io.activej.common.Checks.checkArgument;
 import static io.activej.common.collection.CollectionUtils.first;
+import static io.activej.common.collection.CollectionUtils.union;
+import static io.activej.jmx.Utils.removePrefix;
 import static java.util.Collections.emptyList;
 import static java.util.stream.Collectors.*;
 
@@ -36,22 +38,37 @@ final class AttributeNodeForMap extends AbstractAttributeNodeForLeaf {
 	private static final String TABULAR_TYPE_NAME = "TabularType";
 
 	private final AttributeNode subNode;
-	private final TabularType tabularType;
 	private final boolean isMapOfJmxRefreshable;
+	private final Set<String> visibleValueAttrs = new HashSet<>();
+
+	private TabularType tabularType;
 
 	public AttributeNodeForMap(String name, @Nullable String description, boolean visible,
 			ValueFetcher fetcher, AttributeNode subNode, boolean isMapOfJmxRefreshable) {
 		super(name, description, fetcher, visible);
 		checkArgument(!name.isEmpty(), "Map attribute cannot have empty name");
-		this.tabularType = createTabularType(subNode, name);
 		this.subNode = subNode;
 		this.isMapOfJmxRefreshable = isMapOfJmxRefreshable;
 	}
 
-	private static TabularType createTabularType(AttributeNode subNode, String name) {
+	@Override
+	public final void setVisible(@NotNull String attrName) {
+		if (attrName.equals(name)) {
+			super.setVisible(name);
+			return;
+		}
+		String strippedName = removePrefix(name, attrName);
+		if (subNode.getAllAttributes().contains(strippedName)) {
+			visibleValueAttrs.add(strippedName);
+			return;
+		}
+		throw new IllegalArgumentException("Unknown attribute: " + attrName);
+	}
+
+	private TabularType createTabularType() {
 		String nodeName = "Attribute name = " + name;
 
-		Set<String> visibleAttrs = subNode.getVisibleAttributes();
+		Set<String> visibleAttrs = union(subNode.getVisibleAttributes(), visibleValueAttrs);
 		Map<String, OpenType<?>> attrTypes = subNode.getOpenTypes();
 
 		if (visibleAttrs.isEmpty()) {
@@ -102,7 +119,7 @@ final class AttributeNodeForMap extends AbstractAttributeNodeForLeaf {
 
 	@Override
 	public Map<String, OpenType<?>> getOpenTypes() {
-		return Collections.singletonMap(name, tabularType);
+		return Collections.singletonMap(name, tabularType());
 	}
 
 	@Nullable
@@ -114,8 +131,8 @@ final class AttributeNodeForMap extends AbstractAttributeNodeForLeaf {
 			return null;
 		}
 
-		TabularDataSupport tdSupport = new TabularDataSupport(tabularType);
-		Set<String> visibleSubAttrs = subNode.getVisibleAttributes();
+		TabularDataSupport tdSupport = new TabularDataSupport(tabularType());
+		Set<String> visibleSubAttrs = union(subNode.getVisibleAttributes(), visibleValueAttrs);
 		for (Map.Entry<Object, List<Object>> entry : groupedByKey.entrySet()) {
 			Map<String, Object> aggregatedGroup =
 					subNode.aggregateAttributes(visibleSubAttrs, entry.getValue());
@@ -145,7 +162,7 @@ final class AttributeNodeForMap extends AbstractAttributeNodeForLeaf {
 			allAttributes.putAll(attributes);
 		}
 		allAttributes.put(KEY_COLUMN_NAME, key);
-		return new CompositeDataSupport(tabularType.getRowType(), allAttributes);
+		return new CompositeDataSupport(tabularType().getRowType(), allAttributes);
 	}
 
 	private Map<Object, List<Object>> fetchMapsAndGroupEntriesByKey(List<?> pojos) {
@@ -185,5 +202,11 @@ final class AttributeNodeForMap extends AbstractAttributeNodeForLeaf {
 	@Override
 	public void setAttribute(@NotNull String attrName, @NotNull Object value, @NotNull List<?> targets) {
 		throw new UnsupportedOperationException("Cannot set attributes for map attribute node");
+	}
+
+	private TabularType tabularType(){
+		if (tabularType != null) return tabularType;
+		tabularType = createTabularType();
+		return tabularType;
 	}
 }

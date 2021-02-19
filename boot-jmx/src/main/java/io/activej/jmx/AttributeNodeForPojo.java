@@ -25,11 +25,12 @@ import javax.management.openmbean.OpenType;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static io.activej.jmx.Utils.removePrefix;
 import static java.util.Collections.singletonList;
 
 @SuppressWarnings("rawtypes")
 final class AttributeNodeForPojo implements AttributeNode {
-	private static final char ATTRIBUTE_NAME_SEPARATOR = '_';
+	static final char ATTRIBUTE_NAME_SEPARATOR = '_';
 
 	private final String name;
 	private final String description;
@@ -185,23 +186,10 @@ final class AttributeNodeForPojo implements AttributeNode {
 		for (String attrName : attrNames) {
 			AttributeNode subnode = fullNameToNode.get(attrName);
 			Set<String> subnodeAttrs = selectedSubnodes.computeIfAbsent(subnode, k -> new HashSet<>());
-			String adjustedName = removePrefix(attrName);
+			String adjustedName = removePrefix(name, attrName);
 			subnodeAttrs.add(adjustedName);
 		}
 		return selectedSubnodes;
-	}
-
-	private String removePrefix(String attrName) {
-		String adjustedName;
-		if (name.isEmpty()) {
-			adjustedName = attrName;
-		} else {
-			adjustedName = attrName.substring(name.length());
-			if (adjustedName.length() > 0) {
-				adjustedName = adjustedName.substring(1); // remove ATTRIBUTE_NAME_SEPARATOR
-			}
-		}
-		return adjustedName;
 	}
 
 	private String addPrefix(String attrName) {
@@ -243,7 +231,7 @@ final class AttributeNodeForPojo implements AttributeNode {
 		}
 
 		AttributeNode appropriateSubNode = fullNameToNode.get(attrName);
-		return appropriateSubNode.isSettable(removePrefix(attrName));
+		return appropriateSubNode.isSettable(removePrefix(name, attrName));
 	}
 
 	@Override
@@ -258,7 +246,7 @@ final class AttributeNodeForPojo implements AttributeNode {
 		}
 
 		AttributeNode appropriateSubNode = fullNameToNode.get(attrName);
-		appropriateSubNode.setAttribute(removePrefix(attrName), value, fetchInnerPojos(targets));
+		appropriateSubNode.setAttribute(removePrefix(name, attrName), value, fetchInnerPojos(targets));
 	}
 
 	@Override
@@ -274,11 +262,25 @@ final class AttributeNodeForPojo implements AttributeNode {
 		}
 
 		if (!fullNameToNode.containsKey(attrName)) {
-			throw new IllegalArgumentException("There is no attribute with name: " + attrName);
+			while (true) {
+				String subname = attrName;
+				int lastIndex = subname.lastIndexOf(ATTRIBUTE_NAME_SEPARATOR);
+				if (lastIndex == -1) {
+					throw new IllegalArgumentException("There is no attribute with name: " + attrName);
+				}
+				subname = subname.substring(0, lastIndex);
+				AttributeNode subnode = fullNameToNode.get(subname);
+				if (subnode != null) {
+					subnode.setVisible(removePrefix(name, attrName));
+					return;
+				}
+			}
+
+
 		}
 
 		AttributeNode appropriateSubNode = fullNameToNode.get(attrName);
-		appropriateSubNode.setVisible(removePrefix(attrName));
+		appropriateSubNode.setVisible(removePrefix(name, attrName));
 	}
 
 	@Override
@@ -308,7 +310,7 @@ final class AttributeNodeForPojo implements AttributeNode {
 
 		for (Map.Entry<String, AttributeNode> entry : fullNameToNode.entrySet()) {
 			if (flattenedAttrNameContainsNode(entry.getKey(), attrName)) {
-				entry.getValue().applyModifier(removePrefix(attrName), modifier, fetchInnerPojos(target));
+				entry.getValue().applyModifier(removePrefix(name, attrName), modifier, fetchInnerPojos(target));
 				return;
 			}
 		}

@@ -26,28 +26,45 @@ import java.util.*;
 
 import static io.activej.common.Checks.checkArgument;
 import static io.activej.common.collection.CollectionUtils.first;
+import static io.activej.common.collection.CollectionUtils.union;
+import static io.activej.jmx.Utils.removePrefix;
 import static java.lang.String.format;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.singletonList;
 
 final class AttributeNodeForList extends AbstractAttributeNodeForLeaf {
 	private final AttributeNode subNode;
-	private final ArrayType<?> arrayType;
 	private final boolean isListOfJmxRefreshables;
+	private final Set<String> visibleElementAttrs = new HashSet<>();
+
+	private ArrayType<?> arrayType;
 
 	public AttributeNodeForList(String name, @Nullable String description, boolean visible, ValueFetcher fetcher, AttributeNode subNode,
 			boolean isListOfJmxRefreshables) {
 		super(name, description, fetcher, visible);
 		checkArgument(!name.isEmpty(), "List attribute cannot have empty name");
 		this.subNode = subNode;
-		this.arrayType = createArrayType(subNode, name);
 		this.isListOfJmxRefreshables = isListOfJmxRefreshables;
 	}
 
-	private static ArrayType<?> createArrayType(AttributeNode subNode, String name) {
+	@Override
+	public final void setVisible(@NotNull String attrName) {
+		if (attrName.equals(name)) {
+			super.setVisible(name);
+			return;
+		}
+		String strippedName = removePrefix(name, attrName);
+		if (subNode.getAllAttributes().contains(strippedName)) {
+			visibleElementAttrs.add(strippedName);
+			return;
+		}
+		throw new IllegalArgumentException("Unknown attribute: " + attrName);
+	}
+
+	private ArrayType<?> createArrayType() {
 		String nodeName = "Attribute name = " + name;
 
-		Set<String> visibleAttrs = subNode.getVisibleAttributes();
+		Set<String> visibleAttrs = union(subNode.getVisibleAttributes(), visibleElementAttrs);
 		Map<String, OpenType<?>> attrTypes = subNode.getOpenTypes();
 
 		if (visibleAttrs.isEmpty()) {
@@ -89,14 +106,14 @@ final class AttributeNodeForList extends AbstractAttributeNodeForLeaf {
 
 	@Override
 	public Map<String, OpenType<?>> getOpenTypes() {
-		return Collections.singletonMap(name, arrayType);
+		return Collections.singletonMap(name, arrayType());
 	}
 
 	@Nullable
 	@Override
 	public Object aggregateAttribute(String attrName, List<?> sources) {
 		List<Map<String, Object>> attributesFromAllElements = new ArrayList<>();
-		Set<String> visibleSubAttrs = subNode.getVisibleAttributes();
+		Set<String> visibleSubAttrs = union(subNode.getVisibleAttributes(), visibleElementAttrs);
 		for (Object source : sources) {
 			List<?> currentList = (List<?>) fetcher.fetchFrom(source);
 			if (currentList != null) {
@@ -114,12 +131,12 @@ final class AttributeNodeForList extends AbstractAttributeNodeForLeaf {
 	}
 
 	private Object[] createArrayFrom(List<Map<String, Object>> attributesFromAllElements) {
-		OpenType<?> arrayElementOpenType = arrayType.getElementOpenType();
+		OpenType<?> arrayElementOpenType = arrayType().getElementOpenType();
 		if (arrayElementOpenType instanceof ArrayType) {
 			throw new RuntimeException("Multidimensional arrays are not supported");
 		}
 		try {
-			Class<?> elementClass = classOf(arrayType.getElementOpenType());
+			Class<?> elementClass = classOf(arrayElementOpenType);
 			Object[] array = (Object[]) Array.newInstance(elementClass, attributesFromAllElements.size());
 			for (int i = 0; i < attributesFromAllElements.size(); i++) {
 				Map<String, Object> attributesFromElement = attributesFromAllElements.get(i);
@@ -194,6 +211,12 @@ final class AttributeNodeForList extends AbstractAttributeNodeForLeaf {
 		}
 		// ArrayType is not supported
 		throw new IllegalArgumentException(format("OpenType \"%s\" cannot be converted to Class", openType));
+	}
+
+	private ArrayType<?> arrayType(){
+		if (arrayType != null) return arrayType;
+		arrayType = createArrayType();
+		return arrayType;
 	}
 }
 
