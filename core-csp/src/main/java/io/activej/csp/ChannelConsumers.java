@@ -153,4 +153,18 @@ public final class ChannelConsumers {
 			}
 		};
 	}
+
+	public static abstract class ForwardingChannelConsumer<T> extends AbstractChannelConsumer<T> {
+		private final ChannelConsumer<T> consumer;
+
+		protected ForwardingChannelConsumer(ChannelConsumer<T> consumer) {
+			super(consumer);
+			this.consumer = consumer;
+		}
+
+		@Override
+		protected Promise<Void> doAccept(@Nullable T value) {
+			return consumer.accept(value);
+		}
+	}
 }

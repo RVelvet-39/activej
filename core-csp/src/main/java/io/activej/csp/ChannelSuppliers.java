@@ -525,4 +525,18 @@ public final class ChannelSuppliers {
 			}
 		}
 	}
+
+	public static abstract class ForwardingChannelSupplier<T> extends AbstractChannelSupplier<T> {
+		private final ChannelSupplier<T> supplier;
+
+		protected ForwardingChannelSupplier(ChannelSupplier<T> supplier) {
+			super(supplier);
+			this.supplier = supplier;
+		}
+
+		@Override
+		protected Promise<T> doGet() {
+			return supplier.get();
+		}
+	}
 }
